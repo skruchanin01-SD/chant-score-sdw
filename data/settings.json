@@ -1,0 +1,23 @@
+{
+  "systemName": "ระบบสวดมนต์สรภัญญะ",
+  "schoolName": "โรงเรียนสอยดาววิทยา",
+  "termKey": "2569-T1",
+  "weekKey": "W01",
+  "sessionId": "2569-T1-W01",
+  "passScore": 70,
+  "gasApiUrl": "https://script.google.com/macros/s/AKfycbzZHCm8sR8qdS2kOY-y-M_Lt8_d2DxvucRLcoS4-_t4tZZDKiPrQeGjrFG8_uuh9Xm-pw/exec",
+  "strictCheckBeforeChant": true,
+  "autoLoadLiveSummary": false,
+  "totalStudents": 1700,
+  "batchSize": 170,
+  "batchGapSec": 30,
+  "innerJitterSec": 30,
+  "holdOptions": [6, 8, 10, 12, 15, 18, 20],
+  "autoScrollSpeed": 0.45,
+  "manualScrollPauseMs": 5000,
+  "comboRgbEvery": 5,
+  "adminPin": "1234",
+  "allowMicPause": true,
+  "resultTextPass": "ผ่าน",
+  "resultTextFail": "ยังไม่ผ่าน"
+}
