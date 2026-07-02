@@ -1,0 +1,11 @@
+[
+  {"studentKey":"M1-01-01","level":"ม.1","room":"1","no":"1","fullName":"เด็กชายตัวอย่าง หนึ่ง","active":true},
+  {"studentKey":"M1-01-02","level":"ม.1","room":"1","no":"2","fullName":"เด็กหญิงตัวอย่าง สอง","active":true},
+  {"studentKey":"M1-02-01","level":"ม.1","room":"2","no":"1","fullName":"เด็กชายตัวอย่าง สาม","active":true},
+  {"studentKey":"M2-01-01","level":"ม.2","room":"1","no":"1","fullName":"เด็กหญิงตัวอย่าง สี่","active":true},
+  {"studentKey":"M2-01-02","level":"ม.2","room":"1","no":"2","fullName":"เด็กชายตัวอย่าง ห้า","active":true},
+  {"studentKey":"M3-01-01","level":"ม.3","room":"1","no":"1","fullName":"เด็กหญิงตัวอย่าง หก","active":true},
+  {"studentKey":"M4-01-01","level":"ม.4","room":"1","no":"1","fullName":"นักเรียนตัวอย่าง เจ็ด","active":true},
+  {"studentKey":"M5-01-01","level":"ม.5","room":"1","no":"1","fullName":"นักเรียนตัวอย่าง แปด","active":true},
+  {"studentKey":"M6-01-01","level":"ม.6","room":"1","no":"1","fullName":"นักเรียนตัวอย่าง เก้า","active":true}
+]
