@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="theme-color" content="#fff6c7">
   <title>ระบบสวดมนต์สรภัญญะ</title>
   <link rel="stylesheet" href="assets/style.css">
 </head>
@@ -24,13 +24,21 @@
       </header>
 
       <section id="browserGate" class="card warning hidden">
-        <h2>กรุณาเปิดด้วย Browser ที่รองรับ</h2>
-        <p>ระบบนี้ต้องใช้ไมโครโฟน จึงไม่แนะนำให้เปิดผ่าน LINE, IG, Messenger หรือ Facebook Browser</p>
-        <div class="button-row">
-          <button class="btn primary" id="btnOpenBrowser">เปิดด้วย Chrome / Browser ที่รองรับ</button>
-          <button class="btn soft" id="btnCopyLink">คัดลอกลิงก์</button>
+        <h2>ต้องเปิดใน Chrome / Safari ก่อนเริ่ม</h2>
+        <p>Messenger, LINE, IG และ Facebook Browser อาจไม่ยอมเปิดไมค์ จึงยังไม่ให้เริ่มสวดในหน้านี้</p>
+        <div class="guide-box">
+          <strong>วิธีที่ชัวร์ที่สุด</strong>
+          <ol>
+            <li>กด “คัดลอกลิงก์”</li>
+            <li>เปิด Chrome หรือ Safari เอง</li>
+            <li>วางลิงก์ แล้วกดเข้าเว็บอีกครั้ง</li>
+          </ol>
         </div>
-        <p class="muted small">Android: แนะนำ Chrome | iPhone/iPad: กดเมนู ... แล้วเลือก “เปิดใน Safari”</p>
+        <div class="button-row">
+          <button class="btn primary" id="btnCopyLink">คัดลอกลิงก์</button>
+          <button class="btn soft" id="btnOpenBrowser">ลองเปิด Chrome อัตโนมัติ</button>
+        </div>
+        <p class="muted small">หมายเหตุ: บางแอป เช่น Messenger อาจไม่อนุญาตให้เว็บเด้งออกไป Browser จริง ๆ จึงต้องคัดลอกลิงก์ด้วยตนเอง</p>
       </section>
 
       <section class="score-grid" aria-label="Scoreboard">
@@ -136,11 +144,16 @@
       </section>
       <section id="submitPanel" class="card">
         <h2>ส่งคะแนน</h2>
-        <p id="submitHint" class="muted">ระบบจะกดค้างตามคิวประจำสัปดาห์ แล้วสุ่มเวลาส่งเพื่อลดการชนของ GAS</p>
+        <p id="submitHint" class="muted">กดค้างเพื่อยืนยันการส่งคะแนน ระบบจะจัดคิวให้อัตโนมัติ</p>
         <div id="holdProgressWrap" class="progress-wrap hidden">
           <div id="holdProgress" class="progress-bar"></div>
         </div>
         <p id="queueText" class="status-text"></p>
+        <div id="receiptBox" class="receipt-box hidden">
+          <span>รหัสอีโมจิของคุณ</span>
+          <strong id="receiptCode"></strong>
+          <small>ใช้ยืนยันว่าระบบรับคะแนนแล้ว</small>
+        </div>
         <div class="button-row">
           <button class="btn primary" id="btnHoldSubmit">กดค้างเพื่อส่งคะแนน</button>
           <button class="btn soft" id="btnReturnHome">กลับหน้าแรก</button>

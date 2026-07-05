@@ -24,14 +24,24 @@ const state = {
     combo: 0,
     bestCombo: 0,
     lastRms: 0,
-    stabilitySum: 0
+    stabilitySum: 0,
+    timeData: null,
+    noiseFloor: 0,
+    noiseSamples: [],
+    calibratingUntil: 0,
+    activeStreak: 0
   },
   scrollTimer: null,
   manualScrollTimer: null,
+  ignoreScrollUntil: 0,
   autoScroll: true,
   liveSummary: null,
   holdTimer: null,
   holdStarted: 0,
+  nextHoldTimer: null,
+  nextHoldStarted: 0,
+  nextHoldDone: false,
+  receiptCode: '',
   isSubmitting: false
 };
 
@@ -73,7 +83,9 @@ function bindGlobalEvents(){
     if(confirm('ออกจากหน้าสวดหรือไม่? คะแนนที่ยังไม่จบอาจไม่ถูกบันทึก')) goHomeSafe();
   });
   $('btnMic').addEventListener('click', toggleMic);
-  $('btnNextChapter').addEventListener('click', nextChapter);
+  $('btnNextChapter').addEventListener('mousedown', startHoldNextChapter);
+  $('btnNextChapter').addEventListener('touchstart', startHoldNextChapter, {passive:false});
+  ['mouseup','mouseleave','touchend','touchcancel'].forEach(evt => $('btnNextChapter').addEventListener(evt, cancelHoldNextChapter));
   $('btnReturnHome').addEventListener('click', goHomeSafe);
   $('btnHoldSubmit').addEventListener('mousedown', startHoldSubmit);
   $('btnHoldSubmit').addEventListener('touchstart', startHoldSubmit, {passive:false});
@@ -252,8 +264,9 @@ function loadCurrentChapter(){
   $('chantMeta').textContent = `สัปดาห์ ${state.settings.weekKey} | บทที่ ${state.currentChapterIndex + 1}/${state.activeChants.length}`;
   $('chantText').innerHTML = (chant.lines || []).map(line => `<div class="chant-line">${escapeHtml(line)}</div>`).join('');
   $('chantStage').scrollTop = 0;
+  state.ignoreScrollUntil = Date.now() + 700;
   $('liveTotalScore').textContent = Math.round(state.totalScore);
-  $('btnNextChapter').textContent = state.currentChapterIndex === state.activeChants.length - 1 ? 'จบบทสวด' : 'บทถัดไป';
+  $('btnNextChapter').textContent = state.currentChapterIndex === state.activeChants.length - 1 ? 'กดค้าง 2 วิ: จบบทสวด' : 'กดค้าง 2 วิ: บทถัดไป';
   resetAudioStats();
   startChapterTimers();
 }
@@ -262,7 +275,11 @@ function startChapterTimers(){
   state.autoScroll = true;
   clearInterval(state.scrollTimer);
   state.scrollTimer = setInterval(() => {
-    if(state.autoScroll){ $('chantStage').scrollTop += Number(state.settings.autoScrollSpeed || 0.45); }
+    const stage = $('chantStage');
+    if(state.autoScroll && stage.scrollHeight > stage.clientHeight + 10){
+      state.ignoreScrollUntil = Date.now() + 120;
+      stage.scrollTop += Number(state.settings.autoScrollSpeed || 1.35);
+    }
     updateTimer();
   }, 50);
 }
@@ -273,9 +290,11 @@ function stopChapterTimers(stopMicToo=true){
 }
 function onManualScroll(){
   if(!$('viewChant').classList.contains('active')) return;
+  if(Date.now() < state.ignoreScrollUntil) return;
   state.autoScroll = false;
+  $('micStateText').textContent = 'เลื่อนเองชั่วคราว ระบบจะเลื่อนต่อให้อัตโนมัติ';
   clearTimeout(state.manualScrollTimer);
-  state.manualScrollTimer = setTimeout(()=>{state.autoScroll = true;}, Number(state.settings.manualScrollPauseMs || 5000));
+  state.manualScrollTimer = setTimeout(()=>{state.autoScroll = true;}, Number(state.settings.manualScrollPauseMs || 4500));
 }
 function updateTimer(){
   const sec = Math.floor((Date.now() - state.audio.startedAt)/1000);
@@ -283,16 +302,21 @@ function updateTimer(){
 }
 async function startMic(){
   try{
-    state.audio.stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:true}});
+    state.audio.stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:false}});
     state.audio.context = new (window.AudioContext || window.webkitAudioContext)();
     const source = state.audio.context.createMediaStreamSource(state.audio.stream);
     state.audio.analyser = state.audio.context.createAnalyser();
-    state.audio.analyser.fftSize = 1024;
+    state.audio.analyser.fftSize = 2048;
     state.audio.data = new Uint8Array(state.audio.analyser.frequencyBinCount);
+    state.audio.timeData = new Uint8Array(state.audio.analyser.fftSize);
     source.connect(state.audio.analyser);
     state.audio.micOn = true;
+    state.audio.noiseFloor = 0;
+    state.audio.noiseSamples = [];
+    state.audio.activeStreak = 0;
+    state.audio.calibratingUntil = Date.now() + Number(state.settings.micCalibrationMs || 1600);
     $('btnMic').textContent = 'ไมค์: เปิด';
-    $('micStateText').textContent = 'ไมค์เปิด กำลังวิเคราะห์เสียง';
+    $('micStateText').textContent = 'กำลังวัดเสียงพื้นหลัง...';
     audioLoop();
   }catch(err){
     $('micStateText').textContent = 'เปิดไมค์ไม่สำเร็จ';
@@ -321,37 +345,69 @@ async function toggleMic(){
   }
 }
 function resetAudioStats(){
-  state.audio.totalFrames=0; state.audio.activeFrames=0; state.audio.score=0; state.audio.combo=0; state.audio.bestCombo=0; state.audio.lastRms=0; state.audio.stabilitySum=0;
+  state.audio.totalFrames=0; state.audio.activeFrames=0; state.audio.score=0; state.audio.combo=0; state.audio.bestCombo=0; state.audio.lastRms=0; state.audio.stabilitySum=0; state.audio.noiseSamples=[]; state.audio.noiseFloor=0; state.audio.activeStreak=0;
   $('comboText').textContent = 'คอมโบ x0';
   $('micStateText').textContent = 'กำลังเตรียมไมค์';
 }
 function audioLoop(){
-  if(!state.audio.analyser || !state.audio.data){return;}
+  if(!state.audio.analyser){return;}
   if(state.audio.micOn){
-    state.audio.analyser.getByteFrequencyData(state.audio.data);
-    const rms = calculateRms(state.audio.data);
-    const active = rms > 18;
+    state.audio.analyser.getByteTimeDomainData(state.audio.timeData);
+    const rms = calculateTimeRms(state.audio.timeData);
+
+    if(Date.now() < state.audio.calibratingUntil){
+      state.audio.noiseSamples.push(rms);
+      const tmp = average(state.audio.noiseSamples);
+      $('micStateText').textContent = `กำลังวัดเสียงพื้นหลัง ${tmp.toFixed(1)}`;
+      state.audio.raf = requestAnimationFrame(audioLoop);
+      return;
+    }
+
+    if(!state.audio.noiseFloor){
+      state.audio.noiseFloor = Math.max(0, average(state.audio.noiseSamples));
+    }
+
+    const threshold = Math.max(
+      Number(state.settings.minRmsThreshold || 10),
+      state.audio.noiseFloor + Number(state.settings.noiseMargin || 8)
+    );
+    const rawActive = rms >= threshold;
+    state.audio.activeStreak = rawActive ? state.audio.activeStreak + 1 : 0;
+    const active = state.audio.activeStreak >= Number(state.settings.activeHoldFrames || 4);
+
     state.audio.totalFrames++;
     if(active){
       state.audio.activeFrames++;
       state.audio.combo++;
       state.audio.bestCombo = Math.max(state.audio.bestCombo, state.audio.combo);
       const diff = Math.abs(rms - state.audio.lastRms);
-      state.audio.stabilitySum += Math.max(0, 100 - diff * 3);
-      if(state.audio.combo > 0 && state.audio.combo % Number(state.settings.comboRgbEvery || 5) === 0){triggerRgb();}
-      $('micStateText').textContent = rms > 70 ? 'เสียงดีมาก' : 'เสียงกำลังดี';
+      state.audio.stabilitySum += Math.max(0, 100 - diff * 5);
+      if(state.audio.combo > 0 && state.audio.combo % Number(state.settings.comboRgbEvery || 6) === 0){triggerRgb();}
+      $('micStateText').textContent = rms > threshold * 2.4 ? 'เสียงดีมาก' : 'เสียงชัดเจน';
     }else{
       state.audio.combo = 0;
-      $('micStateText').textContent = 'เสียงเบา / เงียบ';
+      $('micStateText').textContent = rawActive ? 'กำลังจับเสียง...' : 'เสียงยังไม่ชัด';
     }
     state.audio.lastRms = rms;
     const chapterScore = calculateCurrentChapterScore();
     state.audio.score = chapterScore;
     const liveTotal = state.totalScore + chapterScore;
-    $('liveTotalScore').textContent = Math.round(liveTotal / Math.max(1, state.chapters.length + 1));
+    $('liveTotalScore').textContent = Math.round(liveTotal);
     $('comboText').textContent = `คอมโบ x${state.audio.combo}`;
   }
   state.audio.raf = requestAnimationFrame(audioLoop);
+}
+function calculateTimeRms(data){
+  let sum = 0;
+  for(let i=0;i<data.length;i++){
+    const v = data[i] - 128;
+    sum += v * v;
+  }
+  return Math.sqrt(sum / data.length);
+}
+function average(arr){
+  if(!arr || !arr.length) return 0;
+  return arr.reduce((a,b)=>a+b,0)/arr.length;
 }
 function calculateRms(data){
   let sum = 0;
@@ -377,6 +433,32 @@ function triggerRgb(){
   frame.classList.add('rgb-on');
   setTimeout(()=>frame.classList.remove('rgb-on'), 1200);
 }
+
+function startHoldNextChapter(evt){
+  if(evt) evt.preventDefault();
+  if(state.nextHoldTimer) return;
+  state.nextHoldDone = false;
+  const holdSec = Number(state.settings.nextChapterHoldSec || 2);
+  const original = state.currentChapterIndex === state.activeChants.length - 1 ? 'กดค้าง 2 วิ: จบบทสวด' : 'กดค้าง 2 วิ: บทถัดไป';
+  state.nextHoldStarted = Date.now();
+  state.nextHoldTimer = setInterval(()=>{
+    const elapsed = (Date.now() - state.nextHoldStarted) / 1000;
+    const remain = Math.ceil(Math.max(0, holdSec - elapsed));
+    $('btnNextChapter').textContent = remain > 0 ? `ปล่อยไม่ได้... ${remain}` : 'กำลังบันทึกบท';
+    if(elapsed >= holdSec){
+      clearInterval(state.nextHoldTimer);
+      state.nextHoldTimer = null;
+      state.nextHoldDone = true;
+      nextChapter();
+    }
+  },80);
+}
+function cancelHoldNextChapter(){
+  if(!state.nextHoldTimer) return;
+  clearInterval(state.nextHoldTimer);
+  state.nextHoldTimer = null;
+  $('btnNextChapter').textContent = state.currentChapterIndex === state.activeChants.length - 1 ? 'กดค้าง 2 วิ: จบบทสวด' : 'กดค้าง 2 วิ: บทถัดไป';
+}
 function nextChapter(){
   const chant = state.activeChants[state.currentChapterIndex];
   const score = Math.round(calculateCurrentChapterScore());
@@ -392,23 +474,27 @@ function nextChapter(){
 }
 function finishChant(){
   stopChapterTimers(true);
-  const avg = Math.round(state.totalScore / Math.max(1,state.chapters.length));
+  const total = Math.round(state.totalScore);
+  const requiredTotal = Number(state.settings.passScore || 70) * Math.max(1,state.chapters.length);
   showView('result');
   const stu = state.selectedStudent;
   $('resultStudentLine').textContent = `${stu.fullName} | ชั้น ${stu.level}/${stu.room} เลขที่ ${stu.no} | สัปดาห์ ${state.settings.weekKey}`;
-  $('resultTotalScore').textContent = avg;
-  $('resultStatus').textContent = avg >= Number(state.settings.passScore || 70) ? (state.settings.resultTextPass || 'ผ่าน') : (state.settings.resultTextFail || 'ยังไม่ผ่าน');
-  $('chapterResultList').innerHTML = state.chapters.map((c,i)=>`<div class="chapter-row"><span>${i+1}. ${escapeHtml(c.title)}</span><strong>${c.score} คะแนน</strong></div>`).join('');
+  $('resultTotalScore').textContent = total;
+  $('resultStatus').textContent = total >= requiredTotal ? (state.settings.resultTextPass || 'ผ่าน') : (state.settings.resultTextFail || 'ยังไม่ผ่าน');
+  $('chapterResultList').innerHTML = state.chapters.map((c,i)=>`<div class="chapter-row"><span>${i+1}. ${escapeHtml(c.title)}</span><strong>${c.score} คะแนน</strong></div>`).join('') + `<div class="chapter-row total-row"><span>รวมทุกบท</span><strong>${total} คะแนน</strong></div>`;
   const plan = getWeeklySubmitPlan(stu);
-  $('submitHint').textContent = `คิวส่งของคุณ: กดค้าง ${plan.holdSec} วินาที | ส่งหลังเริ่มคิวประมาณ ${plan.sendAfterSec} วินาที`;
+  $('submitHint').textContent = `กดค้างเพื่อยืนยันการส่งคะแนน ระบบจะจัดคิวให้อัตโนมัติ กรุณาอย่าปิดหน้านี้จนกว่าจะได้รหัสอีโมจิ`;
   $('queueText').textContent = '';
+  $('receiptBox').classList.add('hidden');
+  $('receiptCode').textContent = '';
   $('btnHoldSubmit').disabled = false;
-  $('btnHoldSubmit').textContent = `กดค้าง ${plan.holdSec} วินาที เพื่อส่งคะแนน`;
+  $('btnHoldSubmit').textContent = `กดค้าง ${plan.holdSec} วินาที เพื่อยืนยัน`;
 }
 
 function getPayload(){
   const stu = state.selectedStudent;
-  const totalScore = Math.round(state.totalScore / Math.max(1,state.chapters.length));
+  const totalScore = Math.round(state.totalScore);
+  const requiredTotal = Number(state.settings.passScore || 70) * Math.max(1,state.chapters.length);
   return {
     action:'submitScore',
     source:'github-pages',
@@ -421,7 +507,7 @@ function getPayload(){
     no: stu.no,
     fullName: stu.fullName,
     totalScore,
-    result: totalScore >= Number(state.settings.passScore || 70) ? 'ผ่าน' : 'ยังไม่ผ่าน',
+    result: totalScore >= requiredTotal ? 'ผ่าน' : 'ยังไม่ผ่าน',
     chapters: state.chapters,
     micStatus: 'ok',
     submitPlan: getWeeklySubmitPlan(stu),
@@ -443,7 +529,7 @@ function startHoldSubmit(evt){
     const elapsed = (Date.now() - state.holdStarted) / 1000;
     const pct = Math.min(100, (elapsed / plan.holdSec) * 100);
     $('holdProgress').style.width = pct + '%';
-    $('queueText').textContent = `กดค้างต่อเนื่อง ${Math.ceil(Math.max(0, plan.holdSec - elapsed))} วินาที`;
+    $('queueText').textContent = `กดค้างต่อเนื่องอีก ${Math.ceil(Math.max(0, plan.holdSec - elapsed))} วินาที เพื่อยืนยัน`;
     if(elapsed >= plan.holdSec){
       clearInterval(state.holdTimer);
       state.holdTimer = null;
@@ -456,23 +542,25 @@ function cancelHoldSubmit(){
   if(!state.holdTimer) return;
   clearInterval(state.holdTimer); state.holdTimer = null;
   $('holdProgress').style.width = '0%';
-  $('queueText').textContent = 'ยกเลิกการกดค้าง';
+  $('queueText').textContent = 'ยกเลิกการยืนยันส่งคะแนน';
 }
 async function beginQueuedSubmit(plan){
   state.isSubmitting = true;
   $('btnHoldSubmit').disabled = true;
-  $('btnHoldSubmit').textContent = 'กำลังจัดคิวส่งคะแนน...';
+  $('btnHoldSubmit').textContent = 'กำลังเตรียมส่งคะแนน...';
   await countdown(plan.sendAfterSec);
   const payload = getPayload();
   const key = submitKey(payload.studentKey, payload.weekKey);
   localStorage.setItem('pending:' + key, JSON.stringify(payload));
   await submitWithNoCors(payload);
-  $('queueText').textContent = 'ส่งข้อมูลแล้ว กำลังตรวจสอบผลบันทึก...';
+  $('queueText').textContent = 'ส่งข้อมูลแล้ว กำลังออกอีโมจิประจำตัว...';
   const confirmed = await confirmSubmission(payload.studentKey, payload.weekKey);
-  if(confirmed){
+  if(confirmed && confirmed.submitted){
     localStorage.setItem('submitted:' + key, 'yes');
     localStorage.removeItem('pending:' + key);
-    $('queueText').textContent = 'ส่งคะแนนสำเร็จแล้ว';
+    const code = confirmed.receiptCode || '✅';
+    showReceiptCode(code);
+    $('queueText').textContent = 'ส่งคะแนนสำเร็จแล้ว กรุณาจดหรือแคปหน้าจอรหัสอีโมจิ';
     $('btnHoldSubmit').textContent = 'ส่งแล้ว';
   }else{
     $('queueText').textContent = 'ยังยืนยันผลไม่ได้ แต่ข้อมูลถูกส่งไปแล้ว หากยังไม่ขึ้นใน Dashboard ให้กดส่งซ้ำได้ ระบบจะกันข้อมูลซ้ำให้อัตโนมัติ';
@@ -501,10 +589,15 @@ async function confirmSubmission(studentKey, weekKey){
     await sleep(3000 + i*1500);
     try{
       const res = await gasJsonp('check', {studentKey, weekKey});
-      if(res && res.submitted) return true;
+      if(res && res.submitted) return res;
     }catch(err){console.warn('confirm failed',err)}
   }
-  return false;
+  return null;
+}
+function showReceiptCode(code){
+  state.receiptCode = code;
+  $('receiptCode').textContent = code;
+  $('receiptBox').classList.remove('hidden');
 }
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 function getWeeklySubmitPlan(stu){
@@ -597,9 +690,10 @@ function openSupportedBrowser(){
   if(/Android/i.test(ua)){
     const withoutProtocol = url.replace(/^https?:\/\//, '');
     window.location.href = `intent://${withoutProtocol}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(url)};end`;
+    setTimeout(()=>copyCurrentLink(), 800);
   }else{
     copyCurrentLink();
-    alert('คัดลอกลิงก์แล้ว กรุณาเปิดใน Safari/Chrome โดยตรง');
+    alert('คัดลอกลิงก์แล้ว กรุณาเปิด Safari/Chrome แล้ววางลิงก์ด้วยตนเอง');
   }
 }
 async function copyCurrentLink(){
@@ -608,7 +702,7 @@ async function copyCurrentLink(){
 }
 function goHomeSafe(){
   stopChapterTimers(true);
-  state.selectedStudent=null; state.chapters=[]; state.totalScore=0; state.isSubmitting=false;
+  state.selectedStudent=null; state.chapters=[]; state.totalScore=0; state.isSubmitting=false; state.receiptCode='';
   showView('home');
 }
 function escapeHtml(v){return String(v ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
