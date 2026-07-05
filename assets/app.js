@@ -96,7 +96,8 @@ function bindGlobalEvents(){
   document.querySelectorAll('[data-nav="home"]').forEach(btn => btn.addEventListener('click', goHomeSafe));
   $('levelSelect').addEventListener('change', onLevelChange);
   $('roomSelect').addEventListener('change', onRoomChange);
-  $('noSelect').addEventListener('change', renderStudentConfirm);
+  $('studentSelect').addEventListener('change', renderStudentConfirm);
+  $('studentIdInput').addEventListener('input', onStudentIdInput);
   const stage = $('chantStage');
   stage.addEventListener('scroll', onManualScroll, {passive:true});
 }
@@ -127,22 +128,38 @@ function showView(name){
 function detectBrowserGate(){
   const ua = navigator.userAgent || '';
   const isLine = ua.includes('Line/');
-  const isFacebook = ua.includes('FBAN') || ua.includes('FBAV');
-  const isMessenger = ua.includes('Messenger');
+  const isFacebook = ua.includes('FBAN') || ua.includes('FBAV') || ua.includes('FB_IAB') || ua.includes('FB4A') || ua.includes('FBAN/FBIOS');
+  const isMessenger = ua.includes('Messenger') || ua.includes('FB_IAB/MESSENGER');
   const isInstagram = ua.includes('Instagram');
-  const isInAppBrowser = isLine || isFacebook || isMessenger || isInstagram;
+  const isTikTok = ua.includes('TikTok') || ua.includes('Bytedance') || ua.includes('Musical_ly');
+  const isTwitter = ua.includes('Twitter') || ua.includes('XTwitter');
+  const isWechat = ua.includes('MicroMessenger');
+  const isInAppBrowser = isLine || isFacebook || isMessenger || isInstagram || isTikTok || isTwitter || isWechat;
   const isAndroid = /Android/i.test(ua);
   const isIOS = /iPhone|iPad|iPod/i.test(ua);
-  const isChromeAndroid = isAndroid && /Chrome/i.test(ua) && !isInAppBrowser;
-  const isSafariIOS = isIOS && /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS/i.test(ua) && !isInAppBrowser;
+  const isChromeAndroid = isAndroid && /Chrome|CriOS/i.test(ua) && !isInAppBrowser;
+  const isAndroidBrowserOk = isAndroid && /Chrome|EdgA|Firefox|SamsungBrowser|OPR/i.test(ua) && !isInAppBrowser;
+  const isIOSBrowserOk = isIOS && /Safari|CriOS|FxiOS|EdgiOS/i.test(ua) && !isInAppBrowser;
   const isDesktopOk = !isAndroid && !isIOS && /Chrome|Edg|Safari|Firefox/i.test(ua) && !isInAppBrowser;
-  return {ua,isInAppBrowser,isAndroid,isIOS,isSupported:isChromeAndroid || isSafariIOS || isDesktopOk};
+  const appName = isLine ? 'LINE' : isMessenger ? 'Messenger' : isInstagram ? 'Instagram' : isTikTok ? 'TikTok' : isFacebook ? 'Facebook' : isTwitter ? 'X/Twitter' : isWechat ? 'WeChat' : 'แอปนี้';
+  return {ua,isInAppBrowser,isAndroid,isIOS,isChromeAndroid,isSupported:isAndroidBrowserOk || isIOSBrowserOk || isDesktopOk,appName};
+}
+
+function renderBrowserGate(gate){
+  $('browserGate').classList.remove('hidden');
+  $('browserGateText').textContent = `ตอนนี้เปิดจาก ${gate.appName || 'แอป'} ซึ่งมักบล็อกไมโครโฟนหรือไม่ยอมเด้งไป Browser หลัก`;
+  const steps = gate.isAndroid
+    ? ['กด “เปิดด้วย Browser เครื่อง” เพื่อพยายามเปิด Chrome', 'ถ้าไม่เด้ง ให้กด “คัดลอกลิงก์”', 'เปิด Chrome เอง แล้ววางลิงก์']
+    : gate.isIOS
+      ? ['กด “คัดลอกลิงก์”', 'เปิด Safari หรือ Chrome จากหน้าจอเครื่อง', 'วางลิงก์ แล้วกดเข้าเว็บอีกครั้ง']
+      : ['กด “คัดลอกลิงก์”', 'เปิด Browser หลักของเครื่อง', 'วางลิงก์ แล้วเข้าเว็บอีกครั้ง'];
+  $('browserSteps').innerHTML = steps.map(x => `<li>${escapeHtml(x)}</li>`).join('');
 }
 
 async function startGate(){
   const gate = detectBrowserGate();
   if(!gate.isSupported){
-    $('browserGate').classList.remove('hidden');
+    renderBrowserGate(gate);
     return;
   }
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
@@ -159,42 +176,101 @@ async function loadStudentAndChantData(){
   if(state.students.length && state.chants.length) return;
   $('homeStatus').textContent = 'กำลังโหลดรายชื่อและบทสวด...';
   const [students, chants] = await Promise.all([fetchJson('students.json'), fetchJson('chants.json')]);
-  state.students = students.filter(x => x.active !== false);
+  state.students = normalizeStudents(students).filter(x => x.active !== false);
   state.chants = chants.filter(x => x.active !== false).sort((a,b)=>(a.order||0)-(b.order||0));
   $('homeStatus').textContent = `พร้อมใช้งาน: รายชื่อ ${fmt(state.students.length)} คน | บทสวด ${fmt(state.chants.length)} บท`;
+}
+
+function normalizeStudents(input){
+  if(!Array.isArray(input)) return [];
+  const out = [];
+  input.forEach(item => {
+    if(item && item.studentKey && item.level && item.room && item.no && item.fullName){
+      out.push({
+        studentKey:String(item.studentKey).trim(),
+        level:String(item.level).trim(),
+        room:String(item.room).trim(),
+        no:String(item.no).trim(),
+        fullName:String(item.fullName).replace(/\s+/g,' ').trim(),
+        studentId:item.studentId ? String(item.studentId).trim() : '',
+        active:item.active !== false && String(item.active).toLowerCase() !== 'false'
+      });
+      return;
+    }
+    // ช่วยกู้ไฟล์ที่แปลงผิดแบบ key/value เป็นแถวคั่นด้วย tab
+    Object.keys(item || {}).forEach(k => {
+      const v = item[k];
+      [k, v].forEach(row => {
+        if(typeof row !== 'string' || row.indexOf('\t') < 0) return;
+        const cols = row.split('\t').map(x => x.trim());
+        if(cols.length >= 5 && /^M\d-/i.test(cols[0])){
+          out.push({
+            studentKey:cols[0], level:cols[1], room:cols[2], no:cols[3],
+            fullName:(cols[4] || '').replace(/\s+/g,' ').trim(),
+            studentId:cols[5] && /^\d{5}$/.test(cols[5]) ? cols[5] : '',
+            active:String(cols[cols.length-1]).toLowerCase() !== 'false'
+          });
+        }
+      });
+    });
+  });
+  const seen = new Set();
+  return out.filter(s => {
+    if(!s.studentKey || seen.has(s.studentKey)) return false;
+    seen.add(s.studentKey);
+    return true;
+  });
 }
 
 function setupStudentSelectors(){
   const levels = unique(state.students.map(s => s.level)).sort(thSort);
   fillSelect($('levelSelect'), levels, 'เลือกระดับชั้น');
   fillSelect($('roomSelect'), [], 'เลือกห้อง');
-  fillSelect($('noSelect'), [], 'เลือกเลขที่');
+  fillSelect($('studentSelect'), [], 'เลือกชื่อ-นามสกุล');
+  $('studentIdInput').value = '';
   $('studentConfirmBox').classList.add('hidden');
 }
 function onLevelChange(){
   const level = $('levelSelect').value;
-  const rooms = unique(state.students.filter(s=>s.level===level).map(s=>s.room)).sort(numSort);
+  const rooms = unique(state.students.filter(s=>s.level===level).map(s=>String(s.room))).sort(numSort);
   fillSelect($('roomSelect'), rooms, 'เลือกห้อง');
-  fillSelect($('noSelect'), [], 'เลือกเลขที่');
+  fillSelect($('studentSelect'), [], 'เลือกชื่อ-นามสกุล');
+  $('studentIdInput').value = '';
   $('studentConfirmBox').classList.add('hidden');
 }
 function onRoomChange(){
   const level = $('levelSelect').value;
   const room = $('roomSelect').value;
-  const nos = state.students.filter(s=>s.level===level && s.room===room).map(s=>s.no).sort(numSort);
-  fillSelect($('noSelect'), nos, 'เลือกเลขที่');
+  const list = state.students
+    .filter(s=>s.level===level && String(s.room)===String(room))
+    .sort((a,b)=>numSort(a.no,b.no));
+  $('studentSelect').innerHTML = '<option value="">เลือกชื่อ-นามสกุล</option>' + list.map(s => {
+    const label = `เลขที่ ${s.no} - ${s.fullName}`;
+    return `<option value="${escapeAttr(s.studentKey)}">${escapeHtml(label)}</option>`;
+  }).join('');
+  $('studentIdInput').value = '';
+  renderStudentConfirm();
+}
+function onStudentIdInput(){
+  const el = $('studentIdInput');
+  el.value = el.value.replace(/\D/g,'').slice(0,5);
   renderStudentConfirm();
 }
 function renderStudentConfirm(){
   const stu = getSelectedStudent();
   const box = $('studentConfirmBox');
   if(!stu){box.classList.add('hidden');return;}
-  box.innerHTML = `<strong>${escapeHtml(stu.fullName)}</strong><div>ชั้น ${escapeHtml(stu.level)}/${escapeHtml(stu.room)} เลขที่ ${escapeHtml(stu.no)}</div><div class="muted small">ตรวจสอบข้อมูลให้ถูกต้องก่อนเริ่มสวด</div>`;
+  const inputId = $('studentIdInput').value.trim();
+  const idOk = /^\d{5}$/.test(inputId);
+  const verifyText = inputId
+    ? (idOk ? 'เลขประจำตัวครบ 5 หลัก' : 'เลขประจำตัวยังไม่ครบ 5 หลัก')
+    : 'กรอกเลขประจำตัว 5 หลักเพื่อยืนยันก่อนเริ่ม';
+  box.innerHTML = `<strong>${escapeHtml(stu.fullName)}</strong><div>ชั้น ${escapeHtml(stu.level)}/${escapeHtml(stu.room)} เลขที่ ${escapeHtml(stu.no)}</div><div class="muted small">${escapeHtml(verifyText)}</div>`;
   box.classList.remove('hidden');
 }
 function getSelectedStudent(){
-  const level = $('levelSelect').value, room = $('roomSelect').value, no = $('noSelect').value;
-  return state.students.find(s => s.level===level && s.room===room && s.no===no) || null;
+  const key = $('studentSelect').value;
+  return state.students.find(s => String(s.studentKey) === String(key)) || null;
 }
 function fillSelect(el, values, first){
   el.innerHTML = `<option value="">${first}</option>` + values.map(v => `<option value="${escapeAttr(v)}">${escapeHtml(v)}</option>`).join('');
@@ -203,10 +279,14 @@ function unique(arr){return [...new Set(arr.filter(Boolean))];}
 function numSort(a,b){return String(a).localeCompare(String(b),'th',{numeric:true});}
 function thSort(a,b){return String(a).localeCompare(String(b),'th',{numeric:true});}
 
+
 async function confirmStudentAndStart(){
   const stu = getSelectedStudent();
-  if(!stu){alert('กรุณาเลือกข้อมูลนักเรียนให้ครบ');return;}
-  state.selectedStudent = stu;
+  if(!stu){alert('กรุณาเลือกชื่อ-นามสกุล');return;}
+  const inputId = $('studentIdInput').value.trim();
+  if(!/^\d{5}$/.test(inputId)){alert('กรุณากรอกเลขประจำตัวนักเรียน 5 หลัก');return;}
+  if(stu.studentId && String(stu.studentId).trim() !== inputId){alert('เลขประจำตัวไม่ตรงกับรายชื่อที่เลือก กรุณาตรวจสอบอีกครั้ง');return;}
+  state.selectedStudent = {...stu, enteredStudentId: inputId};
   const key = submitKey(stu.studentKey, state.settings.weekKey);
   if(localStorage.getItem('submitted:' + key) === 'yes'){
     showAlreadySubmitted(); return;
@@ -259,7 +339,7 @@ function loadCurrentChapter(){
   stopChapterTimers(false);
   const chant = state.activeChants[state.currentChapterIndex];
   const stu = state.selectedStudent;
-  $('chantStudentLine').textContent = `${stu.fullName} | ชั้น ${stu.level}/${stu.room} เลขที่ ${stu.no}`;
+  $('chantStudentLine').textContent = `${stu.fullName} | ชั้น ${stu.level}/${stu.room} เลขที่ ${stu.no} | รหัส ${stu.enteredStudentId || '-'}`;
   $('chantTitle').textContent = chant.title;
   $('chantMeta').textContent = `สัปดาห์ ${state.settings.weekKey} | บทที่ ${state.currentChapterIndex + 1}/${state.activeChants.length}`;
   $('chantText').innerHTML = (chant.lines || []).map(line => `<div class="chant-line">${escapeHtml(line)}</div>`).join('');
@@ -478,7 +558,7 @@ function finishChant(){
   const requiredTotal = Number(state.settings.passScore || 70) * Math.max(1,state.chapters.length);
   showView('result');
   const stu = state.selectedStudent;
-  $('resultStudentLine').textContent = `${stu.fullName} | ชั้น ${stu.level}/${stu.room} เลขที่ ${stu.no} | สัปดาห์ ${state.settings.weekKey}`;
+  $('resultStudentLine').textContent = `${stu.fullName} | ชั้น ${stu.level}/${stu.room} เลขที่ ${stu.no} | รหัส ${stu.enteredStudentId || '-'} | สัปดาห์ ${state.settings.weekKey}`;
   $('resultTotalScore').textContent = total;
   $('resultStatus').textContent = total >= requiredTotal ? (state.settings.resultTextPass || 'ผ่าน') : (state.settings.resultTextFail || 'ยังไม่ผ่าน');
   $('chapterResultList').innerHTML = state.chapters.map((c,i)=>`<div class="chapter-row"><span>${i+1}. ${escapeHtml(c.title)}</span><strong>${c.score} คะแนน</strong></div>`).join('') + `<div class="chapter-row total-row"><span>รวมทุกบท</span><strong>${total} คะแนน</strong></div>`;
@@ -502,6 +582,7 @@ function getPayload(){
     termKey: state.settings.termKey,
     weekKey: state.settings.weekKey,
     studentKey: stu.studentKey,
+    studentId: stu.enteredStudentId || stu.studentId || '',
     level: stu.level,
     room: stu.room,
     no: stu.no,
@@ -684,21 +765,38 @@ function exportSummaryCsv(){
   const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'chant_summary.csv'; a.click(); URL.revokeObjectURL(a.href);
 }
+function cleanCurrentUrl(){
+  return window.location.origin + window.location.pathname + window.location.search;
+}
 function openSupportedBrowser(){
-  const url = window.location.href;
+  const url = cleanCurrentUrl();
   const ua = navigator.userAgent || '';
+  copyCurrentLink(false);
   if(/Android/i.test(ua)){
     const withoutProtocol = url.replace(/^https?:\/\//, '');
-    window.location.href = `intent://${withoutProtocol}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(url)};end`;
-    setTimeout(()=>copyCurrentLink(), 800);
-  }else{
-    copyCurrentLink();
-    alert('คัดลอกลิงก์แล้ว กรุณาเปิด Safari/Chrome แล้ววางลิงก์ด้วยตนเอง');
+    const intent = `intent://${withoutProtocol}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(url)};end`;
+    window.location.href = intent;
+    setTimeout(()=>{
+      $('queueText') && ($('queueText').textContent = 'ถ้าไม่เด้งไป Chrome ให้เปิด Chrome แล้ววางลิงก์ที่คัดลอกไว้');
+    }, 900);
+    return;
   }
+  if(/iPhone|iPad|iPod/i.test(ua)){
+    // พยายามเปิด Chrome iOS ถ้าผู้ใช้ติดตั้งไว้; ถ้าแอปต้นทางบล็อก จะยังมีลิงก์ในคลิปบอร์ด
+    const chromeUrl = url.replace(/^https:\/\//, 'googlechromes://').replace(/^http:\/\//, 'googlechrome://');
+    window.location.href = chromeUrl;
+    setTimeout(()=>{
+      alert('คัดลอกลิงก์แล้ว หากยังไม่เด้ง ให้เปิด Safari หรือ Chrome จากหน้าจอเครื่อง แล้ววางลิงก์');
+    }, 900);
+    return;
+  }
+  window.open(url, '_blank', 'noopener');
 }
-async function copyCurrentLink(){
-  try{await navigator.clipboard.writeText(window.location.href); alert('คัดลอกลิงก์แล้ว');}
-  catch{prompt('คัดลอกลิงก์นี้', window.location.href);}
+
+async function copyCurrentLink(showAlert=true){
+  const url = cleanCurrentUrl();
+  try{await navigator.clipboard.writeText(url); if(showAlert) alert('คัดลอกลิงก์แล้ว');}
+  catch{prompt('คัดลอกลิงก์นี้', url);}
 }
 function goHomeSafe(){
   stopChapterTimers(true);

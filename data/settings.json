@@ -5,7 +5,7 @@
   "weekKey": "W01",
   "sessionId": "2569-T1-W01",
   "passScore": 70,
-  "gasApiUrl": "https://script.googleusercontent.com/a/macros/soidao.ac.th/echo?user_content_key=AUkAhnTkKlpc4LQNaxqIT9AyvNaU2uiKNr1PujBuIdWp8ozUzsFMJZYQmnPB_pvyGfQsauoIwgH9vqmyZRfvmv_pJvb---4zSXTxh-Sd0wmr8xHy-QvSCImnEAFfMohsLbTf0-fJD8GXaSbdS3qvUYiQkfbsxvDRsPcVdRnyHArHcFHHM9wgwxoe-IAvWIBNh3kLpFJMEkJg43pXUF-07-pm9s6Wxj7eKbjYa7sxnNst488GHAU9XPl1zY23QvKbwqCqq0AUEkPvt50WE1C3KE7nd1VqdxNN0hBwsIYZWjmOn9D_TQqRe74&lib=MVztne4EpjMWmisT9j57DiIUJp7h9lgOh",
+  "gasApiUrl": "https://script.google.com/macros/s/AKfycbywr5IBuWs532mO6h5B7nI3k9Dxbfu0zT7aObdkFeslL47i4Yy77LYMgmswMaC34TE1sA/exec",
   "strictCheckBeforeChant": true,
   "autoLoadLiveSummary": false,
   "totalStudents": 1700,
@@ -24,7 +24,7 @@
   "autoScrollSpeed": 1.35,
   "manualScrollPauseMs": 4500,
   "comboRgbEvery": 6,
-  "adminPin": "JITSUKSA1M",
+  "adminPin": "JITSS9999",
   "allowMicPause": true,
   "resultTextPass": "ผ่าน",
   "resultTextFail": "ยังไม่ผ่าน",
@@ -33,5 +33,7 @@
   "minRmsThreshold": 10,
   "noiseMargin": 8,
   "activeHoldFrames": 4,
-  "theme": "soft-yellow-minimal"
+  "theme": "soft-yellow-minimal",
+  "requireStudentId": true,
+  "validateStudentIdWithRoster": false
 }

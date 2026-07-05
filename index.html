@@ -24,21 +24,21 @@
       </header>
 
       <section id="browserGate" class="card warning hidden">
-        <h2>ต้องเปิดใน Chrome / Safari ก่อนเริ่ม</h2>
-        <p>Messenger, LINE, IG และ Facebook Browser อาจไม่ยอมเปิดไมค์ จึงยังไม่ให้เริ่มสวดในหน้านี้</p>
+        <h2>เปิดในแอปนี้ไม่ได้ ต้องใช้ Browser เครื่อง</h2>
+        <p id="browserGateText">ระบบต้องใช้ไมโครโฟน จึงต้องเปิดผ่าน Chrome / Safari / Browser หลักของเครื่องก่อนเริ่มสวด</p>
         <div class="guide-box">
-          <strong>วิธีที่ชัวร์ที่สุด</strong>
-          <ol>
+          <strong>วิธีเปิดที่เสถียรที่สุด</strong>
+          <ol id="browserSteps">
             <li>กด “คัดลอกลิงก์”</li>
-            <li>เปิด Chrome หรือ Safari เอง</li>
+            <li>เปิด Chrome หรือ Safari จากหน้าจอเครื่อง</li>
             <li>วางลิงก์ แล้วกดเข้าเว็บอีกครั้ง</li>
           </ol>
         </div>
         <div class="button-row">
-          <button class="btn primary" id="btnCopyLink">คัดลอกลิงก์</button>
-          <button class="btn soft" id="btnOpenBrowser">ลองเปิด Chrome อัตโนมัติ</button>
+          <button class="btn primary" id="btnOpenBrowser">เปิดด้วย Browser เครื่อง</button>
+          <button class="btn soft" id="btnCopyLink">คัดลอกลิงก์</button>
         </div>
-        <p class="muted small">หมายเหตุ: บางแอป เช่น Messenger อาจไม่อนุญาตให้เว็บเด้งออกไป Browser จริง ๆ จึงต้องคัดลอกลิงก์ด้วยตนเอง</p>
+        <p class="muted small">Android จะพยายามเปิด Chrome ด้วย Intent ส่วน iPhone/iPad บางแอปไม่อนุญาตให้เว็บเด้งออก Safari จึงมีปุ่มคัดลอกลิงก์เป็นทางหลัก</p>
       </section>
 
       <section class="score-grid" aria-label="Scoreboard">
@@ -77,7 +77,7 @@
       <header class="page-header">
         <button class="btn ghost" data-nav="home">← หน้าแรก</button>
         <h1>เลือกข้อมูลนักเรียน</h1>
-        <p class="muted">เลือกชั้น ห้อง เลขที่ แล้วตรวจสอบชื่อก่อนเริ่มสวด</p>
+        <p class="muted">เลือกชั้น ห้อง ชื่อ-นามสกุล แล้วกรอกเลขประจำตัว 5 หลักก่อนเริ่มสวด</p>
       </header>
 
       <div class="card form-card">
@@ -87,8 +87,11 @@
         <label>ห้องเรียน</label>
         <select id="roomSelect"></select>
 
-        <label>เลขที่</label>
-        <select id="noSelect"></select>
+        <label>ชื่อ-นามสกุล</label>
+        <select id="studentSelect"></select>
+
+        <label>เลขประจำตัวนักเรียน 5 หลัก</label>
+        <input id="studentIdInput" type="tel" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="กรอกเลขประจำตัว 5 หลัก">
 
         <div id="studentConfirmBox" class="confirm-box hidden"></div>
 
